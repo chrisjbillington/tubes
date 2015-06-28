@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+
+from __future__ import print_function
+import sys
+import os
+import signal
+from tempfile import gettempdir
+import time
+import threading
+from subprocess import Popen, PIPE
+
+from gi.repository import GLib, Gtk
+from gi.repository import AppIndicator3 as appindicator
+
+GREEN_PIPE_BYTES = (b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x16\x00\x00\x00\x16\x08\x06\x00'
+                    b'\x00\x00\xc4\xb4l;\x00\x00\x00\x06bKGD\x00\xff\x00\xff\x00\xff\xa0\xbd\xa7\x93'
+                    b'\x00\x00\x00\tpHYs\x00\x00\x0b\x13\x00\x00\x0b\x13\x01\x00\x9a\x9c\x18\x00\x00'
+                    b'\x00\x07tIME\x07\xdf\x06\x1c\x0c,\x07\x14|\x1e\xb4\x00\x00\x00\x19tEXtComment'
+                    b'\x00Created with GIMPW\x81\x0e\x17\x00\x00\x00\xc4IDAT8\xcb\xed\x941\x12\x84 '
+                    b'\x0cE\xbf\xce\x16\x1e\x85\xd2\xe3\xa4\xe4\x18t+\x1d\xc7\xa0\xccqR\xe6(\x96\xdb'
+                    b'\xac3\xb8\x13#Zl\xe5\xef \xf8\x02\xdf?\x01\x1e}5t\x9cY.\xee\x03\x00^g\xc0\xb2'
+                    b'\x96\xb7ULSr\x1b\x0cg\xc0\x06\xb0SY\xcb\xd6 [\rF\xeb#\x12r\xa1m-\xd4`\xbeh\xf4'
+                    b'|\xdanuT\xab\\oy\xec\xc2=h\x17XT\xf6k\x11D\x8a\xa7Q\xb2\xacXx\xe6\xec\xf9\xbb'
+                    b'I\xa3B\xa3f+\x19\x87\x1e\x93\x10\xd2\x94\xc03\x9b?N\xa3"\xd4p\xcf\x8a&R\xbb}\x0f'
+                    b'\xd8\x95\x8a\xf6\xf6$\x84P\x83\x9b\x94\xcb\xe0;\xfa?\x98g\xce\x1d\xa9\xc8W\xc1'
+                    b'\xcb\xcf\x1c\xf0\xa0\xddC\xa8{4v\xd4\x1f\x01\x1f\x92\xcdG\xf9\x85\xb5\x19i\x00'
+                    b'\x00\x00\x00IEND\xaeB`\x82')
+
+YELLOW_PIPE_BYTES = (b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x16\x00\x00\x00\x16\x08\x06\x00'
+                     b'\x00\x00\xc4\xb4l;\x00\x00\x00\x06bKGD\x00\xff\x00\xff\x00\xff\xa0\xbd\xa7\x93'
+                     b'\x00\x00\x00\tpHYs\x00\x00\x0b\x13\x00\x00\x0b\x13\x01\x00\x9a\x9c\x18\x00\x00'
+                     b'\x00\x07tIME\x07\xdf\x06\x1c\x0c/\x038<\x89n\x00\x00\x00\x19tEXtComment\x00Cr'
+                     b'eated with GIMPW\x81\x0e\x17\x00\x00\x00\xddIDAT8\xcb\xed\x94!\x12\x830\x10E?'
+                     b'L\x05\xa68,\xc7\xa0\x9a\x99\\\x81\xb3 * \xa2"g\xe1\x08\xcd\x0c\xba\xb9EQ\x9d\xc1'
+                     b'QC\xabj`&\xb4a\x13"\xaa\xf8.\xd9\xe4\xed\xe6gg\x81]\x93\x02\x873\xf5\xc6}\x00'
+                     b"\xc0\xc1\x06\x1c\xbb\xb62\x05\xa34'\x13\x046\xa0\x06Xh\xec\xda9\x017%\x08M\x97"
+                     b'\x06%H\xa8\x1e\xeb\x1bf|QH\xf94W\xb5\x16{\xde.^\x1e\x93p\n\xea\x04~?\xd4b\xfd'
+                     b'\xba_q<\x9d\xad\xadd\x02\xd7qV\x02@EY\x01\x00I!\x01\x80\x9b:c\xd5\xe3A\tDi\x8e'
+                     b')\xc9\xcf\xc7%\x85D\xdf0?+\xb4\x96Z\xecS@\xa7\xae\xd0\xab\x1f\x94@\xdf0\xd8\xec'
+                     b'\xd9\x04\xf6\xd1\xff\xc1qVr\xdb\xe5\xa4\x90|+\xb8\xfe\x9a\x03\x14\xd4y\x089\x8f'
+                     b'F\x87\xf8.\xe0\x03p\xa6Hp]\x1f,\x90\x00\x00\x00\x00IEND\xaeB`\x82')
+
+RED_PIPE_BYTES = (b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x16\x00\x00\x00\x16\x08\x06\x00'
+                  b'\x00\x00\xc4\xb4l;\x00\x00\x00\x06bKGD\x00\xff\x00\xff\x00\xff\xa0\xbd\xa7\x93'
+                  b'\x00\x00\x00\tpHYs\x00\x00\x0b\x13\x00\x00\x0b\x13\x01\x00\x9a\x9c\x18\x00\x00'
+                  b'\x00\x07tIME\x07\xdf\x06\x1c\x0c,5\xdc\xabO4\x00\x00\x00\x19tEXtComment\x00Cr'
+                  b'eated with GIMPW\x81\x0e\x17\x00\x00\x00\xcdIDAT8\xcb\xed\x94\xbd\x11\x84 \x10'
+                  b'\x85\x9f\xce\xd5`\x13&W\x01dt%\nv\xc5\x98@\x05\x97P\xc2%^\x13\x97\xe8\x0cz\xb8'
+                  b"\xfc\x04\x17\xf9B\x96\xfdvy\xec,pkS\x93qg*<\x07\x00<R\xc0\xd5\xda1\x16\xec8'\x0b"
+                  b'4)`\x008h\xb5v/\xa0b\x05\xdaX\x92\xd7\x9a\x84\x861\xc3X\xf4E-\xe5\xd3\xde\xd5'
+                  b'U\xec5\x0cU\x1e\x93p\n\x9a\x05\xfe\x9c\xc0\xefe\xc1s\x9e\x93\xa3\x14\x03O\xbd'
+                  b'\x94\x000RV\x00\x80p\x0e\x00Tl2.=\xf6Z\xa3\xe3\x1c[\x91\x9f\x8f\x13\xce\xc10V'
+                  b'gE0R\x87s\n\x985\x15a\xf7^k\x18\xc6\x90\xb2\xa7\x08\\\xa3\xff\x83{)U*Y8\xa7J\xc1'
+                  b'\xd3i\x0fP\xd0\xec%\x94\xbd\x1a3\xe2\xb7\x80/\x92wG\x16\xc3\xeb{c\x00\x00\x00'
+                  b'\x00IEND\xaeB`\x82')
+
+
+class Tubes(object):
+    def __init__(self):
+        self.can_ping_gateway = False
+        self.can_ping_google = False
+        self.google_ping_under_1sec = False
+        self.event = threading.Event()
+
+        self.indicator = appindicator.Indicator.new('are-the-tubes-clogged', red_icon,
+                                                    appindicator.IndicatorCategory.SYSTEM_SERVICES)
+        self.indicator.set_status(appindicator.IndicatorStatus.ACTIVE)
+        self.menu = Gtk.Menu()
+        self.menu_item = Gtk.MenuItem('')
+        self.menu.append(self.menu_item)
+        self.menu.show_all()
+        self.indicator.set_menu(self.menu)
+
+        self.internet_thread = threading.Thread(target=self.check_internet)
+        self.internet_thread.daemon=True
+        self.internet_thread.start()
+
+        self.mainloop_thread = threading.Thread(target=self.mainloop)
+        self.mainloop_thread.start()
+
+    def check_internet(self):
+        while True:
+            self.internet_subbproc = Popen(['ping', 'google.com'], stdout=PIPE)
+            while True:
+                line = self.internet_subbproc.stdout.readline().decode('utf8')
+                GLib.idle_add(self.update_menu_item, line.strip())
+                sys.stdout.write(line)
+                if not line:
+                    break
+                if 'bytes from' in line:
+                    self.event.set()
+            time.sleep(1)
+
+    def set_icon(self, icon):
+        self.indicator.set_icon(icon)
+
+    def update_menu_item(self, text):
+        self.menu_item.set_label(text)
+
+    def mainloop(self):
+        timeouts = 1
+        while True:
+            if self.event.wait(1.5):
+                self.event.clear()
+                if timeouts:
+                    GLib.idle_add(self.set_icon, green_icon)
+                timeouts = 0
+            else:
+                timeouts += 1
+                if timeouts == 1:
+                    GLib.idle_add(self.set_icon, yellow_icon)
+                elif timeouts == 2:
+                    GLib.idle_add(self.set_icon, red_icon)
+
+
+if __name__ == '__main__':
+    # Make files in /tmp/ for the icons:
+    TMP = gettempdir()
+
+    green_icon = os.path.join(TMP, 'tubes-green-icon.png')
+    yellow_icon = os.path.join(TMP, 'tubes-yellow-icon.png')
+    red_icon = os.path.join(TMP, 'tubes-red-icon.png')
+
+    icon_data = {green_icon: GREEN_PIPE_BYTES,
+                 yellow_icon: YELLOW_PIPE_BYTES,
+                 red_icon: RED_PIPE_BYTES}
+
+    for filename, icon_byes in icon_data.items():
+        with open(filename, 'wb') as f:
+            f.write(icon_byes)
+
+    tubes = Tubes()
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    Gtk.main()
