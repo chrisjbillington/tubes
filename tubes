@@ -149,5 +149,3 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
 
     Gtk.main()
-    for filename in icon_data:
-        os.unlink(filename)
