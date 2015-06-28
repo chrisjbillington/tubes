@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 from __future__ import print_function
-import sys
 import os
 import signal
 from tempfile import gettempdir
@@ -11,6 +10,8 @@ from subprocess import Popen, PIPE
 
 from gi.repository import GLib, Gtk
 from gi.repository import AppIndicator3 as appindicator
+
+DEVNULL = open(os.devnull, 'w')
 
 GREEN_PIPE_BYTES = (b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x16\x00\x00\x00\x16\x08\x06\x00'
                     b'\x00\x00\xc4\xb4l;\x00\x00\x00\x06bKGD\x00\xff\x00\xff\x00\xff\xa0\xbd\xa7\x93'
@@ -57,9 +58,7 @@ RED_PIPE_BYTES = (b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x16\x00\x00\
 
 class Tubes(object):
     def __init__(self):
-        self.can_ping_gateway = False
-        self.can_ping_google = False
-        self.google_ping_under_1sec = False
+        self.quitting = threading.Event()
         self.event = threading.Event()
 
         self.indicator = appindicator.Indicator.new('are-the-tubes-clogged', red_icon,
@@ -67,7 +66,10 @@ class Tubes(object):
         self.indicator.set_status(appindicator.IndicatorStatus.ACTIVE)
         self.menu = Gtk.Menu()
         self.menu_item = Gtk.MenuItem('')
+        self.quit_menu_item = Gtk.MenuItem('Quit')
         self.menu.append(self.menu_item)
+        self.menu.append(self.quit_menu_item)
+        self.quit_menu_item.connect('activate', self.quit)
         self.menu.show_all()
         self.indicator.set_menu(self.menu)
 
@@ -79,17 +81,17 @@ class Tubes(object):
         self.mainloop_thread.start()
 
     def check_internet(self):
-        while True:
-            self.internet_subbproc = Popen(['ping', 'google.com'], stdout=PIPE)
-            while True:
-                line = self.internet_subbproc.stdout.readline().decode('utf8')
+        while not self.quitting.is_set():
+            self.internet_subproc = Popen(['ping', 'google.com'], stdout=PIPE, stderr=DEVNULL)
+            while not self.quitting.is_set():
+                line = self.internet_subproc.stdout.readline().decode('utf8')
                 GLib.idle_add(self.update_menu_item, line.strip())
-                sys.stdout.write(line)
                 if not line:
                     break
                 if 'bytes from' in line:
                     self.event.set()
-            time.sleep(1)
+            if not self.quitting.is_set():
+                time.sleep(1)
 
     def set_icon(self, icon):
         self.indicator.set_icon(icon)
@@ -99,7 +101,7 @@ class Tubes(object):
 
     def mainloop(self):
         timeouts = 1
-        while True:
+        while not self.quitting.is_set():
             if self.event.wait(1.5):
                 self.event.clear()
                 if timeouts:
@@ -111,6 +113,15 @@ class Tubes(object):
                     GLib.idle_add(self.set_icon, yellow_icon)
                 elif timeouts == 2:
                     GLib.idle_add(self.set_icon, red_icon)
+
+    def quit(self, *args):
+        self.quitting.set()
+        self.event.set()
+        self.mainloop_thread.join()
+        self.internet_subproc.terminate()
+        self.internet_thread.join()
+        Gtk.main_quit()
+
 
 
 if __name__ == '__main__':
@@ -130,5 +141,13 @@ if __name__ == '__main__':
             f.write(icon_byes)
 
     tubes = Tubes()
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+    def signal_handler(*args):
+        tubes.quitting.set()
+        GLib.idle_add(tubes.quit)
+
+    signal.signal(signal.SIGINT, signal_handler)
+
     Gtk.main()
+    for filename in icon_data:
+        os.unlink(filename)
