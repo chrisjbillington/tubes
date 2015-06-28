@@ -21,7 +21,9 @@ The following should do the trick:
 
 sudo wget -O /usr/bin/tubes https://bitbucket.org/cbillington/tubes/raw/default/tubes
 sudo chmod +x /usr/bin/tubes
+echo "[Desktop Entry]
+Type=Application
+Exec=tubes" > ~/.config/autostart/tubes.desktop
 tubes &
-ln -s /usr/bin/tubes ~/.config/autostart
 
 ```
