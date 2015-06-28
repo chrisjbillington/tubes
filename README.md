@@ -1,23 +1,27 @@
-tubes
-*****
+# tubes #
 
 An Ubuntu indicator to tell you if the Intertubes are clogged.
 
-Tries to ping The Google, and tells you if the pongs made it back through the internets.
+Tries to ping The Google all the time, and tells you if the pongs are making it back through the internets.
 
-Green icon: The interwebs are shiny.
+**Green icon**: The interwebs are shiny.
 
-Yellow icon: The tubes to The Google are slightly clogged.
+**Yellow icon**: The tubes to The Google are slightly clogged.
 
-Red icon: you have no internets.
+**Red icon**: you have no internets.
 
-Installation
-============
+### Installation ###
 
-It's one file, put it somewhere, chmod +x it and add it to your startup programs.
+It's one file, `tubes`, put it somewhere, chmod +x it and add it to your startup programs.
 
-If you prefer irresponsibly copying and pasting command lines you found on the internet, the following should do the trick:
+The following should do the trick:
 
-::
+```
+#!bash
 
-   $ <to be written once on bitbucket>
+sudo wget -O /usr/bin/tubes https://bitbucket.org/cbillington/tubes/raw/default/tubes
+sudo chmod +x /usr/bin/tubes
+tubes &
+ln -s /usr/bin/tubes ~/.config/autostart
+
+```
