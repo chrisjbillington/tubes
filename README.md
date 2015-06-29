@@ -4,11 +4,17 @@ An Ubuntu indicator to tell you if the Intertubes are clogged.
 
 Tries to ping The Google all the time, and tells you if the pongs are making it back through the internets.
 
-**Green icon**: The interwebs are shiny.
+**Green icon**:
+![green-example.png](https://bitbucket.org/cbillington/tubes/raw/default/green-example.png)
+The interwebs are shiny.
 
-**Yellow icon**: The tubes to The Google are slightly clogged.
+**Yellow icon**:
+![yellow-example.png](https://bitbucket.org/cbillington/tubes/raw/default/yellow-example.png)
+The tubes to The Google are slightly clogged.
 
-**Red icon**: you have no internets.
+**Red icon**:
+![red-example.png](https://bitbucket.org/cbillington/tubes/raw/default/red-example.png)
+You have no internets.
 
 ### Installation ###
 
