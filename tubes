@@ -3,7 +3,7 @@
 from __future__ import print_function
 import os
 import signal
-from tempfile import gettempdir
+from tempfile import mkstemp
 import time
 import threading
 from subprocess import Popen, PIPE
@@ -61,7 +61,7 @@ class Tubes(object):
         self.quitting = threading.Event()
         self.event = threading.Event()
 
-        self.indicator = appindicator.Indicator.new('are-the-tubes-clogged', red_icon,
+        self.indicator = appindicator.Indicator.new('are-the-tubes-clogged', red_icon_tempfile,
                                                     appindicator.IndicatorCategory.SYSTEM_SERVICES)
         self.indicator.set_status(appindicator.IndicatorStatus.ACTIVE)
         self.menu = Gtk.Menu()
@@ -105,14 +105,14 @@ class Tubes(object):
             if self.event.wait(1.5):
                 self.event.clear()
                 if timeouts:
-                    GLib.idle_add(self.set_icon, green_icon)
+                    GLib.idle_add(self.set_icon, green_icon_tempfile)
                 timeouts = 0
             else:
                 timeouts += 1
                 if timeouts == 1:
-                    GLib.idle_add(self.set_icon, yellow_icon)
+                    GLib.idle_add(self.set_icon, yellow_icon_tempfile)
                 elif timeouts == 2:
-                    GLib.idle_add(self.set_icon, red_icon)
+                    GLib.idle_add(self.set_icon, red_icon_tempfile)
 
     def quit(self, *args):
         self.quitting.set()
@@ -123,22 +123,19 @@ class Tubes(object):
         Gtk.main_quit()
 
 
-
 if __name__ == '__main__':
     # Make files in /tmp/ for the icons:
-    TMP = gettempdir()
+    green_icon_fd, green_icon_tempfile = mkstemp()
+    yellow_icon_fd, yellow_icon_tempfile = mkstemp()
+    red_icon_fd, red_icon_tempfile = mkstemp()
 
-    green_icon = os.path.join(TMP, 'tubes-green-icon.png')
-    yellow_icon = os.path.join(TMP, 'tubes-yellow-icon.png')
-    red_icon = os.path.join(TMP, 'tubes-red-icon.png')
+    icon_data = {green_icon_fd: GREEN_PIPE_BYTES,
+                 yellow_icon_fd: YELLOW_PIPE_BYTES,
+                 red_icon_fd: RED_PIPE_BYTES}
 
-    icon_data = {green_icon: GREEN_PIPE_BYTES,
-                 yellow_icon: YELLOW_PIPE_BYTES,
-                 red_icon: RED_PIPE_BYTES}
-
-    for filename, icon_byes in icon_data.items():
-        with open(filename, 'wb') as f:
-            f.write(icon_byes)
+    for fd, icon_bytes in icon_data.items():
+        with os.fdopen(fd, 'wb') as f:
+            f.write(icon_bytes)
 
     tubes = Tubes()
 
@@ -146,6 +143,11 @@ if __name__ == '__main__':
         tubes.quitting.set()
         GLib.idle_add(tubes.quit)
 
-    signal.signal(signal.SIGINT, signal_handler)
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, signal_handler)
 
     Gtk.main()
+
+    # Cleanup temp files:
+    for filename in [green_icon_tempfile, yellow_icon_tempfile, red_icon_tempfile]:
+        os.unlink(filename)
