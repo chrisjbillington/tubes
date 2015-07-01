@@ -88,7 +88,7 @@ class Tubes(object):
 
     def check_internet(self):
         while not self.quitting.is_set():
-            self.internet_subproc = Popen(['ping', 'google.com'], stdout=PIPE, stderr=PIPE)
+            self.internet_subproc = Popen(['ping', '8.8.8.8'], stdout=PIPE, stderr=PIPE)
             stdout_fd = self.internet_subproc.stdout.fileno()
             stderr_fd = self.internet_subproc.stderr.fileno()
             while not self.quitting.is_set() and self.internet_subproc.poll() is None:
