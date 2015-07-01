@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 
-from __future__ import print_function
+from __future__ import division, print_function
 import os
 import signal
 from tempfile import mkstemp
 import time
 import threading
 from subprocess import Popen, PIPE
+import select
 
 from gi.repository import GLib, Gtk
 from gi.repository import AppIndicator3 as appindicator
 
-DEVNULL = open(os.devnull, 'w')
 
 GREEN_PIPE_BYTES = (b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x16\x00\x00\x00\x16\x08\x06\x00'
                     b'\x00\x00\xc4\xb4l;\x00\x00\x00\x06bKGD\x00\xff\x00\xff\x00\xff\xa0\xbd\xa7\x93'
@@ -65,9 +65,15 @@ class Tubes(object):
                                                     appindicator.IndicatorCategory.SYSTEM_SERVICES)
         self.indicator.set_status(appindicator.IndicatorStatus.ACTIVE)
         self.menu = Gtk.Menu()
-        self.menu_item = Gtk.MenuItem('')
+        self.ping_menu_item = Gtk.MenuItem('')
+        self.availability_menu_item_1m = Gtk.MenuItem('')
+        self.availability_menu_item_5m = Gtk.MenuItem('')
+        self.availability_menu_item_15m = Gtk.MenuItem('')
         self.quit_menu_item = Gtk.MenuItem('Quit')
-        self.menu.append(self.menu_item)
+        self.menu.append(self.ping_menu_item)
+        self.menu.append(self.availability_menu_item_1m)
+        self.menu.append(self.availability_menu_item_5m)
+        self.menu.append(self.availability_menu_item_15m)
         self.menu.append(self.quit_menu_item)
         self.quit_menu_item.connect('activate', self.quit)
         self.menu.show_all()
@@ -82,27 +88,56 @@ class Tubes(object):
 
     def check_internet(self):
         while not self.quitting.is_set():
-            self.internet_subproc = Popen(['ping', 'google.com'], stdout=PIPE, stderr=DEVNULL)
-            while not self.quitting.is_set():
-                line = self.internet_subproc.stdout.readline().decode('utf8')
-                GLib.idle_add(self.update_menu_item, line.strip())
-                if not line:
-                    break
-                if 'bytes from' in line:
-                    self.event.set()
+            self.internet_subproc = Popen(['ping', 'google.com'], stdout=PIPE, stderr=PIPE)
+            stdout_fd = self.internet_subproc.stdout.fileno()
+            stderr_fd = self.internet_subproc.stderr.fileno()
+            while not self.quitting.is_set() and self.internet_subproc.poll() is None:
+                read_ready, _, _ = select.select([stdout_fd, stderr_fd], [], [])
+                for fd in read_ready:
+                    if fd == stdout_fd:
+                        line = self.internet_subproc.stdout.readline().decode('utf8')
+                        if 'bytes from' in line:
+                            self.event.set()
+                    elif fd == stderr_fd:
+                        line = self.internet_subproc.stderr.readline().decode('utf8')
+                    GLib.idle_add(self.update_ping_menu_item, line.strip())
             if not self.quitting.is_set():
                 time.sleep(1)
 
     def set_icon(self, icon):
         self.indicator.set_icon(icon)
 
-    def update_menu_item(self, text):
-        self.menu_item.set_label(text)
+    def update_ping_menu_item(self, text):
+        self.ping_menu_item.set_label(text)
+
+    def update_availabity_menu_items(self, avail_1m, avail_5m, avail_15m):
+        self.availability_menu_item_1m.set_label("Last 1 min availability: %d%%"%int(round(avail_1m)))
+        self.availability_menu_item_5m.set_label("Last 5 min availability: %d%%"%int(round(avail_5m)))
+        self.availability_menu_item_15m.set_label("Last 15 min availability: %d%%"%int(round(avail_15m)))
 
     def mainloop(self):
+
+        one_min_availability = 100
+        five_min_availability = 100
+        fifteen_min_availability = 100
+
         timeouts = 1
         while not self.quitting.is_set():
-            if self.event.wait(1.5):
+            start_time = time.time()
+            success = self.event.wait(1.5)
+            interval = time.time() - start_time
+
+            # Exponential averaging at three timescales:
+            k_1 = interval/60
+            k_5 = interval/(5*60)
+            k_15 = interval/(15*60)
+            one_min_availability = k_1 * 100 * success + (1 - k_1) * one_min_availability
+            five_min_availability = k_5 * 100 * success + (1 - k_5) * five_min_availability
+            fifteen_min_availability = k_15 * 100 * success + (1 - k_15) * fifteen_min_availability
+
+            GLib.idle_add(self.update_availabity_menu_items,
+                          one_min_availability, five_min_availability, fifteen_min_availability)
+            if success:
                 self.event.clear()
                 if timeouts:
                     GLib.idle_add(self.set_icon, green_icon_tempfile)
@@ -118,7 +153,10 @@ class Tubes(object):
         self.quitting.set()
         self.event.set()
         self.mainloop_thread.join()
-        self.internet_subproc.terminate()
+        try:
+            self.internet_subproc.terminate()
+        except OSError:
+            pass
         self.internet_thread.join()
         Gtk.main_quit()
 
