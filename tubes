@@ -123,10 +123,13 @@ class Tubes(object):
 
         timeouts = 1
         while not self.quitting.is_set():
-            start_time = time.time()
+            start_time = time.monotonic()
             success = self.event.wait(1.5)
-            interval = time.time() - start_time
-
+            interval = time.monotonic() - start_time
+            if interval > 2:
+                # Computer was sleeping or something, don't let this affect
+                # the availability stats:
+                interval = 1.5
             # Exponential averaging at three timescales:
             k_1 = interval/60
             k_5 = interval/(5*60)
