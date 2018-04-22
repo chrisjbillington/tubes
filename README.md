@@ -26,7 +26,9 @@ You have no internets.
 
 It's one file, `tubes`, put it somewhere, chmod +x it and add it to your startup programs.
 
-The following should do the trick:
+Installation on Ubuntu requres tha package ``gir1.2-appindicator3-0.1``, installable with apt-get.
+
+Once you have that, the following should do the trick:
 
 ```
 #!bash
