@@ -1,6 +1,6 @@
 # tubes #
 
-An Ubuntu indicator to tell you if the Intertubes are clogged.
+An AppIndicator to tell you if the Intertubes are clogged. Works on Ubuntu with unity or gnome shell, and should work on any other DE that supports AppIndicator. 
 
 Tries to ping The Google all the time, and tells you if the pongs are making it back through the internets.
 
@@ -24,11 +24,13 @@ You have no internets.
 
 ### Installation ###
 
-It's one file, `tubes`, put it somewhere, chmod +x it and add it to your startup programs.
+Installation on Ubuntu (tested on 17.10 and 18.04) requires the package ``gir1.2-appindicator3-0.1`` (or newer), installable with apt-get.
+If on some other OS you'll need to get whatever packages allow you to use AppIndicators.
+On gnome-shell, the appindicators gnome shell extension is also required (installed by default in Ubuntu)
 
-Installation on Ubuntu requres tha package ``gir1.2-appindicator3-0.1``, installable with apt-get.
+Once you have whatever dependencies are required for AppIndicators to work on your DE, `tubes` is one file, put it somewhere, chmod +x it and add it to your startup programs.
 
-Once you have that, the following should do the trick:
+The following should do the trick:
 
 ```
 #!bash
