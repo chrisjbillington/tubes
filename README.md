@@ -6,19 +6,19 @@ Tries to ping The Google all the time, and tells you if the pongs are making it 
 
 **Green icon**
 
-![green-example.png](https://bitbucket.org/cbillington/tubes/raw/default/green-example.png)
+![green-example.png](https://raw.githubusercontent.com/chrisjbillington/tubes/master/green-example.png)
 
 The interwebs are shiny.
 
 **Yellow icon**
 
-![yellow-example.png](https://bitbucket.org/cbillington/tubes/raw/default/yellow-example.png)
+![yellow-example.png](https://raw.githubusercontent.com/chrisjbillington/tubes/master/yellow-example.png)
 
 The tubes to The Google are slightly clogged.
 
 **Red icon**
 
-![red-example.png](https://bitbucket.org/cbillington/tubes/raw/default/red-example.png)
+![red-example.png](https://raw.githubusercontent.com/chrisjbillington/tubes/master/red-example.png)
 
 You have no internets.
 
@@ -35,7 +35,7 @@ The following should do the trick:
 ```
 #!bash
 
-sudo wget -O /usr/bin/tubes https://bitbucket.org/cbillington/tubes/raw/default/tubes
+sudo curl -o /usr/bin/tubes https://raw.githubusercontent.com/chrisjbillington/tubes/master/tubes
 sudo chmod +x /usr/bin/tubes
 echo "[Desktop Entry]
 Type=Application
