@@ -117,13 +117,13 @@ class Tubes(object):
 
     def update_availabity_menu_items(self, avail_1m, avail_5m, avail_15m):
         self.availability_menu_item_1m.set_label(
-            f"Last 1 min availability: {avail_1m:00f}%"
+            f"Last 1 min availability: {avail_1m:.00f}%"
         )
         self.availability_menu_item_5m.set_label(
-            f"Last 5 min availability: {avail_5m:00f}%"
+            f"Last 5 min availability: {avail_5m:.00f}%"
         )
         self.availability_menu_item_15m.set_label(
-            f"Last 15 min availability: {avail_15m:00f}%"
+            f"Last 15 min availability: {avail_15m:.00f}%"
         )
 
     def mainloop(self):
