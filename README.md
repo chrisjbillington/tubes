@@ -1,6 +1,7 @@
 # tubes #
 
-![logo.png](https://raw.githubusercontent.com/chrisjbillington/tubes/master/logo.png)
+<img src="https://raw.githubusercontent.com/chrisjbillington/tubes/master/logo.png"
+width="640" height="320" />
 
 An AppIndicator to tell you if the Intertubes are clogged. Works on any Linux desktop
 environment tha supports AppIndicator.
