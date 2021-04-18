@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from __future__ import division, print_function
 import os
 import signal
 from tempfile import mkstemp
@@ -10,48 +9,52 @@ from subprocess import Popen, PIPE
 import select
 
 import gi
+
 gi.require_version('Gtk', '3.0')
 gi.require_version('AppIndicator3', '0.1')
 from gi.repository import GLib, Gtk
 from gi.repository import AppIndicator3 as appindicator
 
 
-GREEN_PIPE_BYTES = (
-    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x0e\x00\x00\x00\x10\x08\x06\x00"
-    b"\x00\x00&\x94N:\x00\x00\x00\xb2IDAT(\xcf\xa5\x93=\x12\x84 \x0c\x85\x9f\xce\x16"
-    b"\x1e\x85\xd2\xe3\xa4\xe4\x18tB\xc71(s\x9c\x949\x8a\xe5V:\xe1G\xd7q_\x07\xc9\x17"
-    b"\x927aB\xaf\x88\xb1\xaa\xfbO\x1b\xc8{\xdeFTXB\x957\xb5\x80I\xa8\x94\xf7|\x14H\x00"
-    b"0\x03\x00\t\xddB6\xe6\x8a\xdbN\xb0\xadz\xf5b\xe12\x9c\xf1\x16\xb6\xd0\x10\x14\x95"
-    b"\xfa,\x02O\xbe+4\x03\x88\xbcr\xba\x9b\xef\x90z\x85zM\x00\xe29#\t!,\x01\xbc\xf2"
-    b"\xd0\x18\xf5\nW\xdc\xb8Ucy\x05Z\xc0\xb6\xda\x89\x84@Bp\xc5]\x9a5\xe3\xa5\xfe\x07y"
-    b"\xe5\xf4\xc0\xd5\xd4\x82\xd1\xee\xe1\x0f\xe8\\\xf2'_\xaa\x8b\x7f\x01\xb1\xdbGy"
-    b"\xca\xe5\x93\xd0\x00\x00\x00\x00IEND\xaeB`\x82"
-)
+GREEN_PIPE = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -0.5 14 16"
+shape-rendering="crispEdges"><path stroke="rgba(0,0,0,0.5019607843137255)" d="M4 0h6M2
+1h2M10 1h2M0 2h2M12 2h2M0 3h1M13 3h1M0 4h1M13 4h1M0 5h1M13 5h1M0 6h1M13 6h1M1 7h1M12
+7h1M1 8h1M12 8h1M1 9h1M12 9h1M1 10h1M12 10h1M1 11h1M12 11h1M1 12h1M12 12h1M1 13h2M11
+13h2M2 14h2M10 14h2M3 15h8" /> <path stroke="#88f888" d="M4 1h6M2 2h2M10 2h2M2 3h1M11
+3h1M2 4h2M10 4h1M2 5h8M2 6h2M9 6h1M3 7h1M9 7h1M3 9h2M3 10h2M8 10h1M3 11h2M8 11h1M3
+12h2M8 12h1M3 13h2M8 13h1M4 14h1M8 14h1" /> <path stroke="#000000" d="M4 2h6M3 3h8M4
+4h6M2 7h1M11 7h1M3 8h2M9 8h2M5 9h4" /> <path stroke="#58d058" d="M1 3h1M1 4h1M1 5h1M1
+6h1M4 6h4M4 7h4M2 8h1M5 8h3M2 9h1M2 10h1M5 10h2M2 11h1M5 11h2M2 12h1M5 12h2M5 13h2M5
+14h2" /> <path stroke="#28a028" d="M12 3h1M11 4h2M10 5h3M8 6h1M10 6h3M8 7h1M10 7h1M8
+8h1M11 8h1M9 9h3M7 10h1M9 10h3M7 11h1M9 11h3M7 12h1M9 12h3M7 13h1M9 13h2M7 14h1M9 14h1"
+/> </svg>
+"""
 
+YELLOW_PIPE = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -0.5 14 16"
+shape-rendering="crispEdges" <path stroke="rgba(0,0,0,0.5019607843137255)" d="M4 0h6M2
+1h2M10 1h2M0 2h2M12 2h2M0 3h1M13 3h1M0 4h1M13 4h1M0 5h1M13 5h1M0 6h1M13 6h1M1 7h1M12
+7h1M1 8h1M12 8h1M1 9h1M12 9h1M1 10h1M12 10h1M1 11h1M12 11h1M1 12h1M12 12h1M1 13h2M11
+13h2M2 14h2M10 14h2M3 15h8" /> <path stroke="#f8e2bf" d="M4 1h6M2 2h2M10 2h2M2 3h1M11
+3h1M2 4h2M10 4h1M2 5h8M2 6h2M9 6h1M3 7h1M9 7h1M3 9h2M3 10h2M8 10h1M3 11h2M8 11h1M3
+12h2M8 12h1M3 13h2M8 13h1M4 14h1M8 14h1" /> <path stroke="#000000" d="M4 2h6M3 3h8M4
+4h6M2 7h1M11 7h1M3 8h2M9 8h2M5 9h4" /> <path stroke="#f2ca89" d="M1 3h1M1 4h1M1 5h1M1
+6h1M4 6h4M4 7h4M2 8h1M5 8h3M2 9h1M2 10h1M5 10h2M2 11h1M5 11h2M2 12h1M5 12h2M5 13h2M5
+14h2" /> <path stroke="#ebab44" d="M12 3h1M11 4h2M10 5h3M8 6h1M10 6h3M8 7h1M10 7h1M8
+8h1M11 8h1M9 9h3M7 10h1M9 10h3M7 11h1M9 11h3M7 12h1M9 12h3M7 13h1M9 13h2M7 14h1M9 14h1"
+/> </svg>"""
 
-YELLOW_PIPE_BYTES = (
-    b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x0e\x00\x00\x00\x10\x08\x06\x00'
-    b'\x00\x00&\x94N:\x00\x00\x00\xcaIDAT(\xcf\xa5\x931\x0e\x830\x0cE\x1f\x88\x81\xa5l'
-    b'\xac\x1c\x83\xceH\\\x81\xb30t\x00\x86\x0e9\x0bG(\x12ss\x8b2Ub\xa3\x0b\xed\xd4\xa5'
-    b'\xa0\x84\x04\xa8\xda\xbf%\xf6\xfb\xb1-\xc7\xc1T\x89]\xda\xbd\xb7\x0c\x8c][\xd8(?J'
-    b'\xb4<g\t(\t\x9a\xc6\xae\x9d\x0c*\x00\x17`\x90b\x13Rc}\x9d\x163\xb8t]{\xf1q=[{\xdc'
-    b'\x84U\xc8\n\xbe\xeeR;?o\x17\x0e\xc7\x93a\xe4\x01e\x10\xe7\x00\xc5V\xa9\x00a\xd6'
-    b'\x00T@9\xf78H\x81\x1f%|L\x8c\xc1\x84YC_\xa7\xf6R\x95\x91k\xa0\nLrm%\rR0HA_\xa7'
-    b'\xab\xc3r\xf9Q\xff\x83A\x9cW{\xc9a\xd6TK\xb0T\xf7p\x07\x9a\x97\xfc\x9b/e\xc4\xdf.'
-    b'\xfaG\xf0W\xcf\x9b\xa2\x00\x00\x00\x00IEND\xaeB`\x82'
-)
-
-RED_PIPE_BYTES = (
-    b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x0e\x00\x00\x00\x10\x08\x06\x00'
-    b'\x00\x00&\x94N:\x00\x00\x00\xbaIDAT(\xcf\xa5\x93\xbd\x11\x830\x0cF\x1f\x1c3\xb0'
-    b'\x04M&\xb0;\xb6\xc2\x18\xb3\x15GcO\x90\xc6#\xa4!K\xa4I8\xff\x01\xb9\xe4+%\xbd\xcf'
-    b'\x92N\xae\xc8\xa5)+\x8a7ib\xb3v,Q\xad\x94Q]\x95\x02AA\xa4\xcd\xda\x8f\xc1\x04P'
-    b'\x03xcN\xa10\xb7\x081\xee`\xeaz\xf4\xe2}\x18\x8a3\x9e\xc2!T\x04\x9f\t\xf8XWn\xf3'
-    b'\x9c\x195\x80\xee\x94\x02\x18\xcfZ\x05\xe8\x9d\x03\x98\x00\xbd\xcf\xe8\x8d\xa1'
-    b'\x95\x92\xb7I\xb6\x98\xde9\x16!\xca\xad\x06+\x8f\xc0\x10\xf8\xa8.\xb5\xe4\x8d\xc1'
-    b'\x1b\xc3"\xc4\xe1\xb2j~\xd4\xff`\xa7\xd4tU\xdc;7\xa5\xa0\x0e\xef\xf0\x02\xda\x8f'
-    b'\xfc\x9b/\x95\xe5_\xc1\xa5F\x96\xec\xd0=~\x00\x00\x00\x00IEND\xaeB`\x82'
-)
+RED_PIPE = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -0.5 14 16"
+shape-rendering="crispEdges"><path stroke="rgba(0,0,0,0.5019607843137255)" d="M4 0h6M2
+1h2M10 1h2M0 2h2M12 2h2M0 3h1M13 3h1M0 4h1M13 4h1M0 5h1M13 5h1M0 6h1M13 6h1M1 7h1M12
+7h1M1 8h1M12 8h1M1 9h1M12 9h1M1 10h1M12 10h1M1 11h1M12 11h1M1 12h1M12 12h1M1 13h2M11
+13h2M2 14h2M10 14h2M3 15h8" /> <path stroke="#eac1c1" d="M4 1h6M2 2h2M10 2h2M2 3h1M11
+3h1M2 4h2M10 4h1M2 5h8M2 6h2M9 6h1M3 7h1M9 7h1M3 9h2M3 10h2M8 10h1M3 11h2M8 11h1M3
+12h2M8 12h1M3 13h2M8 13h1M4 14h1M8 14h1" /> <path stroke="#000000" d="M4 2h6M3 3h8M4
+4h6M2 7h1M11 7h1M3 8h2M9 8h2M5 9h4" /> <path stroke="#d58282" d="M1 3h1M1 4h1M1 5h1M1
+6h1M4 6h4M4 7h4M2 8h1M5 8h3M2 9h1M2 10h1M5 10h2M2 11h1M5 11h2M2 12h1M5 12h2M5 13h2M5
+14h2" /> <path stroke="#ba3e3e" d="M12 3h1M11 4h2M10 5h3M8 6h1M10 6h3M8 7h1M10 7h1M8
+8h1M11 8h1M9 9h3M7 10h1M9 10h3M7 11h1M9 11h3M7 12h1M9 12h3M7 13h1M9 13h2M7 14h1M9 14h1"
+/> </svg>"""
 
 
 class Tubes(object):
@@ -59,15 +62,18 @@ class Tubes(object):
         self.quitting = threading.Event()
         self.event = threading.Event()
 
-        self.indicator = appindicator.Indicator.new('are-the-tubes-clogged', red_icon_tempfile,
-                                                    appindicator.IndicatorCategory.SYSTEM_SERVICES)
+        self.indicator = appindicator.Indicator.new(
+            id='are-the-tubes-clogged',
+            icon_name=red_icon_tempfile,
+            category=appindicator.IndicatorCategory.SYSTEM_SERVICES,
+        )
         self.indicator.set_status(appindicator.IndicatorStatus.ACTIVE)
         self.menu = Gtk.Menu()
-        self.ping_menu_item = Gtk.MenuItem('')
-        self.availability_menu_item_1m = Gtk.MenuItem('')
-        self.availability_menu_item_5m = Gtk.MenuItem('')
-        self.availability_menu_item_15m = Gtk.MenuItem('')
-        self.quit_menu_item = Gtk.MenuItem('Quit')
+        self.ping_menu_item = Gtk.MenuItem(label='')
+        self.availability_menu_item_1m = Gtk.MenuItem(label='')
+        self.availability_menu_item_5m = Gtk.MenuItem(label='')
+        self.availability_menu_item_15m = Gtk.MenuItem(label='')
+        self.quit_menu_item = Gtk.MenuItem(label='Quit')
         self.menu.append(self.ping_menu_item)
         self.menu.append(self.availability_menu_item_1m)
         self.menu.append(self.availability_menu_item_5m)
@@ -78,9 +84,10 @@ class Tubes(object):
         self.indicator.set_menu(self.menu)
 
         self.internet_thread = threading.Thread(target=self.check_internet)
-        self.internet_thread.daemon=True
+        self.internet_thread.daemon = True
         self.internet_thread.start()
 
+        self.internet_subproc = None
         self.mainloop_thread = threading.Thread(target=self.mainloop)
         self.mainloop_thread.start()
 
@@ -103,15 +110,21 @@ class Tubes(object):
                 time.sleep(1)
 
     def set_icon(self, icon):
-        self.indicator.set_icon(icon)
+        self.indicator.set_icon_full(icon, icon_descriptions[icon])
 
     def update_ping_menu_item(self, text):
         self.ping_menu_item.set_label(text)
 
     def update_availabity_menu_items(self, avail_1m, avail_5m, avail_15m):
-        self.availability_menu_item_1m.set_label("Last 1 min availability: %d%%"%int(round(avail_1m)))
-        self.availability_menu_item_5m.set_label("Last 5 min availability: %d%%"%int(round(avail_5m)))
-        self.availability_menu_item_15m.set_label("Last 15 min availability: %d%%"%int(round(avail_15m)))
+        self.availability_menu_item_1m.set_label(
+            f"Last 1 min availability: {avail_1m:00f}%"
+        )
+        self.availability_menu_item_5m.set_label(
+            f"Last 5 min availability: {avail_5m:00f}%"
+        )
+        self.availability_menu_item_15m.set_label(
+            f"Last 15 min availability: {avail_15m:00f}%"
+        )
 
     def mainloop(self):
 
@@ -129,15 +142,25 @@ class Tubes(object):
                 # the availability stats:
                 interval = 1.5
             # Exponential averaging at three timescales:
-            k_1 = interval/60
-            k_5 = interval/(5*60)
-            k_15 = interval/(15*60)
-            one_min_availability = k_1 * 100 * success + (1 - k_1) * one_min_availability
-            five_min_availability = k_5 * 100 * success + (1 - k_5) * five_min_availability
-            fifteen_min_availability = k_15 * 100 * success + (1 - k_15) * fifteen_min_availability
+            k_1 = interval / 60
+            k_5 = interval / (5 * 60)
+            k_15 = interval / (15 * 60)
+            one_min_availability = (
+                k_1 * 100 * success + (1 - k_1) * one_min_availability
+            )
+            five_min_availability = (
+                k_5 * 100 * success + (1 - k_5) * five_min_availability
+            )
+            fifteen_min_availability = (
+                k_15 * 100 * success + (1 - k_15) * fifteen_min_availability
+            )
 
-            GLib.idle_add(self.update_availabity_menu_items,
-                          one_min_availability, five_min_availability, fifteen_min_availability)
+            GLib.idle_add(
+                self.update_availabity_menu_items,
+                one_min_availability,
+                five_min_availability,
+                fifteen_min_availability,
+            )
             if success:
                 self.event.clear()
                 if timeouts:
@@ -164,21 +187,29 @@ class Tubes(object):
 
 if __name__ == '__main__':
     # Make files in /tmp/ for the icons:
-    green_icon_fd, green_icon_tempfile = mkstemp()
-    yellow_icon_fd, yellow_icon_tempfile = mkstemp()
-    red_icon_fd, red_icon_tempfile = mkstemp()
+    green_icon_fd, green_icon_tempfile = mkstemp(suffix='.svg')
+    yellow_icon_fd, yellow_icon_tempfile = mkstemp(suffix='.svg')
+    red_icon_fd, red_icon_tempfile = mkstemp(suffix='.svg')
 
-    icon_data = {green_icon_fd: GREEN_PIPE_BYTES,
-                 yellow_icon_fd: YELLOW_PIPE_BYTES,
-                 red_icon_fd: RED_PIPE_BYTES}
+    icon_data = {
+        green_icon_fd: GREEN_PIPE,
+        yellow_icon_fd: YELLOW_PIPE,
+        red_icon_fd: RED_PIPE,
+    }
 
-    for fd, icon_bytes in icon_data.items():
-        with os.fdopen(fd, 'wb') as f:
-            f.write(icon_bytes)
+    icon_descriptions = {
+        green_icon_tempfile: "Green pipe",
+        yellow_icon_tempfile: "Yellow pipe",
+        red_icon_tempfile: "Red pipe",
+    }
+
+    for fd, svg_data in icon_data.items():
+        with os.fdopen(fd, 'w') as f:
+            f.write(svg_data)
 
     tubes = Tubes()
 
-    def signal_handler(*args):
+    def signal_handler(*_):
         tubes.quitting.set()
         GLib.idle_add(tubes.quit)
 
