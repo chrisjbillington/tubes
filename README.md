@@ -1,10 +1,10 @@
 # tubes #
 
 <img src="https://raw.githubusercontent.com/chrisjbillington/tubes/master/logo.png"
-width="640" height="320" />
+width="320" height="160" />
 
 An AppIndicator to tell you if the Intertubes are clogged. Works on any Linux desktop
-environment tha supports AppIndicator.
+environment that supports AppIndicators.
 
 Tries to ping Google, and tells you if the pongs are making it back through the pipes.
 
