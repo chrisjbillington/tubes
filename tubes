@@ -31,7 +31,7 @@ shape-rendering="crispEdges"><path stroke="rgba(0,0,0,0.5019607843137255)" d="M4
 """
 
 YELLOW_PIPE = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -0.5 14 16"
-shape-rendering="crispEdges" <path stroke="rgba(0,0,0,0.5019607843137255)" d="M4 0h6M2
+shape-rendering="crispEdges"><path stroke="rgba(0,0,0,0.5019607843137255)" d="M4 0h6M2
 1h2M10 1h2M0 2h2M12 2h2M0 3h1M13 3h1M0 4h1M13 4h1M0 5h1M13 5h1M0 6h1M13 6h1M1 7h1M12
 7h1M1 8h1M12 8h1M1 9h1M12 9h1M1 10h1M12 10h1M1 11h1M12 11h1M1 12h1M12 12h1M1 13h2M11
 13h2M2 14h2M10 14h2M3 15h8" /> <path stroke="#f8e2bf" d="M4 1h6M2 2h2M10 2h2M2 3h1M11
