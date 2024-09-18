@@ -29,7 +29,7 @@ You have no internet.
 ### Project status ###
 
 This project is stable. It doesn't require much maintenance, and I've been using it
-mostly unchanged since 2015 (it is 2021 at time of writing). So if you see that there
+mostly unchanged since 2015 (it is 2024 at time of writing). So if you see that there
 haven't been many commits lately, don't worry - it is not abandoned. Please report any
 bugs.
 
