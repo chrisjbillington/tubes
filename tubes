@@ -74,7 +74,7 @@ ICON_DESCRIPTIONS = {
 TMP = Path(gettempdir())
 
 ICON_TEMPFILES = {
-    name: TMP / f"tubes-{name}-{hexlify(os.urandom(8))}" for name in ICON_DATA
+    name: TMP / f"tubes-{name}-{hexlify(os.urandom(8)).decode('utf8')}.svg" for name in ICON_DATA
 }
 
 def get_icon_filpath(name):
