@@ -71,19 +71,15 @@ ICON_DESCRIPTIONS = {
     'red': "Red pipe",
 }
 
-TMP = Path(gettempdir())
+TMPDIR = Path(os.getenv('XDG_RUNTIME_DIR', gettempdir())) / 'tubes'
 
-ICON_TEMPFILES = {
-    name: TMP / f"tubes-{name}-{hexlify(os.urandom(8)).decode('utf8')}.svg" for name in ICON_DATA
-}
+ICON_TEMPFILES = {name: TMPDIR / f"{name}.svg" for name in ICON_DATA}
 
 def get_icon_filpath(name):
     """Return existing tempfile filepath for icon, or create one if none exists"""
-
-    # We can't just create these on startup because files in /tmp eventually get cleaned
-    # up, apparently, even whilst the system is running. So we re-create them on demand.
     path = ICON_TEMPFILES[name]
     if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(ICON_DATA[name], 'utf8')
     return str(path)
 
