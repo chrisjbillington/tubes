@@ -78,6 +78,8 @@ PING_TIMEOUT_MILLISECONDS = int(round(1000 * PING_TIMEOUT_SECONDS))
 # logger = offlog.Logger('tubes')
 # logger.info('starting')
 
+MIN_ICON_UPDATE_INTERVAL_SECONDS = 1
+
 class Gui:
     def __init__(self, shutdown_fd):
         self._indicator = AppIndicator3.Indicator.new(
@@ -105,9 +107,18 @@ class Gui:
         self._menu.show_all()
         self._indicator.set_menu(self._menu)
         self._current_icon_name = None
+        self._last_icon_set_time = time.monotonic()
 
     def _set_icon(self, name):
         if self._current_icon_name != name:
+
+            # rate-limit setting icon:
+            t = time.monotonic()
+            if t - self._last_icon_set_time < MIN_ICON_UPDATE_INTERVAL_SECONDS:
+                # logger.info(f"Deferring setting icon {name}")
+                return
+            self._last_icon_set_time = t
+
             # logger.info(f"Setting icon: {name}")
             self._indicator.set_icon_full(
                 str(ICON_FILEAPTHS[name]), ICON_DESCRIPTIONS[name]
