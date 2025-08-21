@@ -5,7 +5,6 @@ import signal
 import time
 from subprocess import Popen, PIPE
 from pathlib import Path
-from tempfile import gettempdir
 
 import gi
 
@@ -68,19 +67,16 @@ ICON_DESCRIPTIONS = {
     'red': "Red pipe",
 }
 
-TMPDIR = Path(os.getenv('XDG_RUNTIME_DIR', gettempdir())) / 'tubes'
+CACHEDIR = Path(os.getenv('XDG_CACHE_HOME', Path('~/.cache').expanduser()))
+ICON_DIR = CACHEDIR / 'tubes'
+ICON_FILEAPTHS = {name: ICON_DIR / f"{name}.svg" for name in ICON_DATA}
 
-ICON_TEMPFILES = {name: TMPDIR / f"{name}.svg" for name in ICON_DATA}
+PING_TIMEOUT_SECONDS = 2.0
+PING_TIMEOUT_MILLISECONDS = int(round(1000 * PING_TIMEOUT_SECONDS))
 
-
-def get_icon_filpath(name):
-    """Return existing tempfile filepath for icon, or create one if none exists"""
-    path = ICON_TEMPFILES[name]
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(ICON_DATA[name], 'utf8')
-    return str(path)
-
+# import offlog
+# logger = offlog.Logger('tubes')
+# logger.info('starting')
 
 class Gui:
     def __init__(self, shutdown_fd):
@@ -108,9 +104,15 @@ class Gui:
 
         self._menu.show_all()
         self._indicator.set_menu(self._menu)
+        self._current_icon_name = None
 
     def _set_icon(self, name):
-        self._indicator.set_icon_full(get_icon_filpath(name), ICON_DESCRIPTIONS[name])
+        if self._current_icon_name != name:
+            # logger.info(f"Setting icon: {name}")
+            self._indicator.set_icon_full(
+                str(ICON_FILEAPTHS[name]), ICON_DESCRIPTIONS[name]
+            )
+        self._current_icon_name = name
 
     def update_ping_output(self, line):
         self._menu_item_ping_output.set_label(line)
@@ -146,10 +148,10 @@ class AvailabilityStats:
         t = time.monotonic()
         dt = t - self._t_prev
         self._t_prev = t
-        if dt > 2:
+        if dt > 2 * PING_TIMEOUT_SECONDS:
             # Computer was sleeping or something, don't let this affect
             # the availability stats:
-            dt = 1.5
+            dt = PING_TIMEOUT_SECONDS
 
         if success:
             self._fail_count = 0
@@ -224,7 +226,7 @@ class App:
             self._child = None
 
     def _set_timeout(self):
-        self._timeout = GLib.timeout_add(1500, self._do_timeout)
+        self._timeout = GLib.timeout_add(PING_TIMEOUT_MILLISECONDS, self._do_timeout)
 
     def _cancel_timeout(self):
         if self._timeout is not None:
@@ -269,17 +271,30 @@ class App:
         Gtk.main_quit()
 
 
-def main():
-    app = App()
-    app.run()
+def create_icons_files():
+    if not ICON_DIR.exists():
+        ICON_DIR.mkdir(parents=True, exist_ok=True)
+    for name, path in ICON_FILEAPTHS.items():
+        if not path.exists():
+            path.write_text(ICON_DATA[name], 'utf8')
 
-    # Cleanup temp files:
-    for path in ICON_TEMPFILES.values():
+
+def cleanup_icon_files():
+    for path in ICON_FILEAPTHS.values():
         path.unlink(missing_ok=True)
     try:
-        TMPDIR.rmdir()
+        ICON_DIR.rmdir()
     except OSError:
         pass
+
+
+def main():
+    create_icons_files()
+    try:
+        app = App()
+        app.run()
+    finally:
+        cleanup_icon_files()
 
 
 if __name__ == '__main__':
