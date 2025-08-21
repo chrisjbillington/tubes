@@ -2,20 +2,17 @@
 
 import os
 import signal
-from tempfile import gettempdir
-from binascii import hexlify
-from pathlib import Path
 import time
-import threading
 from subprocess import Popen, PIPE
-import select
+from pathlib import Path
+from tempfile import gettempdir
 
 import gi
 
 gi.require_version('Gtk', '3.0')
 gi.require_version('AppIndicator3', '0.1')
 from gi.repository import GLib, Gtk
-from gi.repository import AppIndicator3 as appindicator
+from gi.repository import AppIndicator3
 
 
 GREEN_PIPE = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -0.5 14 16"
@@ -75,6 +72,7 @@ TMPDIR = Path(os.getenv('XDG_RUNTIME_DIR', gettempdir())) / 'tubes'
 
 ICON_TEMPFILES = {name: TMPDIR / f"{name}.svg" for name in ICON_DATA}
 
+
 def get_icon_filpath(name):
     """Return existing tempfile filepath for icon, or create one if none exists"""
     path = ICON_TEMPFILES[name]
@@ -84,145 +82,205 @@ def get_icon_filpath(name):
     return str(path)
 
 
-class Tubes(object):
-    def __init__(self):
-        self.quitting = threading.Event()
-        self.event = threading.Event()
-
-        self.indicator = appindicator.Indicator.new(
-            id='are-the-tubes-clogged',
+class Gui:
+    def __init__(self, shutdown_fd):
+        self._indicator = AppIndicator3.Indicator.new(
+            id='tubes',
             icon_name='',
-            category=appindicator.IndicatorCategory.SYSTEM_SERVICES,
+            category=AppIndicator3.IndicatorCategory.SYSTEM_SERVICES,
         )
-        self.indicator.set_status(appindicator.IndicatorStatus.ACTIVE)
-        self.menu = Gtk.Menu()
-        self.ping_menu_item = Gtk.MenuItem(label='')
-        self.availability_menu_item_1m = Gtk.MenuItem(label='')
-        self.availability_menu_item_5m = Gtk.MenuItem(label='')
-        self.availability_menu_item_15m = Gtk.MenuItem(label='')
-        self.quit_menu_item = Gtk.MenuItem(label='Quit')
-        self.menu.append(self.ping_menu_item)
-        self.menu.append(self.availability_menu_item_1m)
-        self.menu.append(self.availability_menu_item_5m)
-        self.menu.append(self.availability_menu_item_15m)
-        self.menu.append(self.quit_menu_item)
-        self.quit_menu_item.connect('activate', self.quit)
-        self.menu.show_all()
-        self.indicator.set_menu(self.menu)
+        self._indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+        self._menu = Gtk.Menu()
+        self._menu_item_ping_output = Gtk.MenuItem(label='')
+        self._menu_item_availability_1m = Gtk.MenuItem(label='')
+        self._menu_item_availability_5m = Gtk.MenuItem(label='')
+        self._menu_item_availability_15m = Gtk.MenuItem(label='')
+        self._menu_item_quit = Gtk.MenuItem(label='Quit')
+        self._menu_item_quit.connect(
+            'activate', lambda *_: os.write(shutdown_fd, b'\0')
+        )
 
-        self.internet_thread = threading.Thread(target=self.check_internet)
-        self.internet_thread.daemon = True
-        self.internet_thread.start()
+        self._menu.append(self._menu_item_ping_output)
+        self._menu.append(self._menu_item_availability_1m)
+        self._menu.append(self._menu_item_availability_5m)
+        self._menu.append(self._menu_item_availability_15m)
+        self._menu.append(self._menu_item_quit)
 
-        self.internet_subproc = None
-        self.mainloop_thread = threading.Thread(target=self.mainloop)
-        self.mainloop_thread.start()
+        self._menu.show_all()
+        self._indicator.set_menu(self._menu)
 
-    def check_internet(self):
-        while not self.quitting.is_set():
-            self.internet_subproc = Popen(['ping', '8.8.8.8'], stdout=PIPE, stderr=PIPE)
-            stdout_fd = self.internet_subproc.stdout.fileno()
-            stderr_fd = self.internet_subproc.stderr.fileno()
-            while not self.quitting.is_set() and self.internet_subproc.poll() is None:
-                read_ready, _, _ = select.select([stdout_fd, stderr_fd], [], [])
-                for fd in read_ready:
-                    if fd == stdout_fd:
-                        line = self.internet_subproc.stdout.readline().decode('utf8')
-                        if 'bytes from' in line:
-                            self.event.set()
-                    elif fd == stderr_fd:
-                        line = self.internet_subproc.stderr.readline().decode('utf8')
-                    GLib.idle_add(self.update_ping_menu_item, line.strip())
-            if not self.quitting.is_set():
-                time.sleep(1)
+    def _set_icon(self, name):
+        self._indicator.set_icon_full(get_icon_filpath(name), ICON_DESCRIPTIONS[name])
 
-    def set_icon(self, name):
-        self.indicator.set_icon_full(get_icon_filpath(name), ICON_DESCRIPTIONS[name])
+    def update_ping_output(self, line):
+        self._menu_item_ping_output.set_label(line)
 
-    def update_ping_menu_item(self, text):
-        self.ping_menu_item.set_label(text)
-
-    def update_availabity_menu_items(self, avail_1m, avail_5m, avail_15m):
-        self.availability_menu_item_1m.set_label(
+    def update_availability(self, stats):
+        fail_count, avail_1m, avail_5m, avail_15m = stats
+        self._menu_item_availability_1m.set_label(
             f"Last 1 min availability: {avail_1m:.00f}%"
         )
-        self.availability_menu_item_5m.set_label(
+        self._menu_item_availability_5m.set_label(
             f"Last 5 min availability: {avail_5m:.00f}%"
         )
-        self.availability_menu_item_15m.set_label(
+        self._menu_item_availability_15m.set_label(
             f"Last 15 min availability: {avail_15m:.00f}%"
         )
+        if fail_count == 0:
+            self._set_icon('green')
+        elif fail_count == 1:
+            self._set_icon('yellow')
+        else:
+            self._set_icon('red')
 
-    def mainloop(self):
 
-        one_min_availability = 100
-        five_min_availability = 100
-        fifteen_min_availability = 100
+class AvailabilityStats:
+    def __init__(self):
+        self._availability_1m = 100
+        self._availability_5m = 100
+        self._availability_15m = 100
+        self._t_prev = time.monotonic()
+        self._fail_count = 0
 
-        timeouts = 1
-        while not self.quitting.is_set():
-            start_time = time.monotonic()
-            success = self.event.wait(1.5)
-            interval = time.monotonic() - start_time
-            if interval > 2:
-                # Computer was sleeping or something, don't let this affect
-                # the availability stats:
-                interval = 1.5
-            # Exponential averaging at three timescales:
-            k_1 = interval / 60
-            k_5 = interval / (5 * 60)
-            k_15 = interval / (15 * 60)
-            one_min_availability = (
-                k_1 * 100 * success + (1 - k_1) * one_min_availability
-            )
-            five_min_availability = (
-                k_5 * 100 * success + (1 - k_5) * five_min_availability
-            )
-            fifteen_min_availability = (
-                k_15 * 100 * success + (1 - k_15) * fifteen_min_availability
-            )
+    def update(self, success):
+        t = time.monotonic()
+        dt = t - self._t_prev
+        self._t_prev = t
+        if dt > 2:
+            # Computer was sleeping or something, don't let this affect
+            # the availability stats:
+            dt = 1.5
 
-            GLib.idle_add(
-                self.update_availabity_menu_items,
-                one_min_availability,
-                five_min_availability,
-                fifteen_min_availability,
-            )
-            if success:
-                self.event.clear()
-                if timeouts:
-                    GLib.idle_add(self.set_icon, 'green')
-                timeouts = 0
-            else:
-                timeouts += 1
-                if timeouts == 1:
-                    GLib.idle_add(self.set_icon, 'yellow')
-                elif timeouts == 2:
-                    GLib.idle_add(self.set_icon, 'red')
+        if success:
+            self._fail_count = 0
+        else:
+            self._fail_count += 1
 
-    def quit(self, *_):
-        self.quitting.set()
-        self.event.set()
-        self.mainloop_thread.join()
-        try:
-            self.internet_subproc.terminate()
-        except OSError:
-            pass
-        self.internet_thread.join()
+        # Exponential averaging at three timescales:
+        k_1 = dt / 60
+        k_5 = dt / (5 * 60)
+        k_15 = dt / (15 * 60)
+
+        self._availability_1m = (
+            k_1 * 100 * bool(success) + (1 - k_1) * self._availability_1m
+        )
+        self._availability_5m = (
+            k_5 * 100 * bool(success) + (1 - k_5) * self._availability_5m
+        )
+        self._availability_15m = (
+            k_15 * 100 * bool(success) + (1 - k_15) * self._availability_15m
+        )
+
+    def get(self):
+        # Return fail count, 1m, 5m, 15m availability
+        return (
+            self._fail_count,
+            self._availability_1m,
+            self._availability_5m,
+            self._availability_15m,
+        )
+
+
+class App:
+    def __init__(self):
+        # Self-pipe for clean shutdown
+        self._selfpipe_r, self._selfpipe_w = os.pipe()
+        signal.signal(signal.SIGINT, lambda *_: os.write(self._selfpipe_w, b'\0'))
+        signal.signal(signal.SIGTERM, lambda *_: os.write(self._selfpipe_w, b'\0'))
+        GLib.io_add_watch(self._selfpipe_r, GLib.IO_IN, lambda *args: self._shutdown())
+
+        self._availability_stats = AvailabilityStats()
+        self._gui = Gui(self._selfpipe_w)
+
+        self._stdout_watch = None
+        self._stderr_watch = None
+        self._child = None
+        self._timeout = None
+        self._start_child()
+        self._set_timeout()
+
+    def _start_child(self):
+        self._child = Popen(['ping', '8.8.8.8'], stdout=PIPE, stderr=PIPE)
+        self._stdout_watch = GLib.io_add_watch(
+            self._child.stdout.fileno(), GLib.IO_IN, lambda *_: self._read_stdout()
+        )
+        self._stderr_watch = GLib.io_add_watch(
+            self._child.stderr.fileno(), GLib.IO_IN, lambda *_: self._read_stderr()
+        )
+
+    def _stop_child(self):
+        if self._stdout_watch is not None:
+            GLib.source_remove(self._stdout_watch)
+            self._stdout_watch = None
+        if self._stderr_watch is not None:
+            GLib.source_remove(self._stderr_watch)
+            self._stderr_watch = None
+        if self._child is not None:
+            try:
+                self._child.terminate()
+                self._child.wait()
+            except OSError:
+                pass
+            self._child = None
+
+    def _set_timeout(self):
+        self._timeout = GLib.timeout_add(1500, self._do_timeout)
+
+    def _cancel_timeout(self):
+        if self._timeout is not None:
+            GLib.source_remove(self._timeout)
+            self._timeout = None
+
+    def _reset_timeout(self):
+        self._cancel_timeout()
+        self._set_timeout()
+
+    def _read_stdout(self):
+        line = self._child.stdout.readline().decode('utf8').strip()
+        self._gui.update_ping_output(line)
+        if 'bytes from' in line:
+            self._availability_stats.update(success=True)
+            self._gui.update_availability(self._availability_stats.get())
+            self._reset_timeout()
+        return True
+
+    def _read_stderr(self):
+        line = self._child.stderr.readline().decode('utf8').strip()
+        self._gui.update_ping_output(line)
+        return True
+
+    def _do_timeout(self):
+        self._availability_stats.update(success=False)
+        self._gui.update_availability(self._availability_stats.get())
+        # Restart child process if it exited:
+        if self._child is not None and self._child.poll() is not None:
+            self._stop_child()
+            self._start_child()
+        return True
+
+    def run(self):
+        Gtk.main()
+
+    def _shutdown(self):
+        os.close(self._selfpipe_r)
+        os.close(self._selfpipe_w)
+        self._stop_child()
+        self._cancel_timeout()
         Gtk.main_quit()
 
 
-tubes = Tubes()
+def main():
+    app = App()
+    app.run()
 
-def signal_handler(*_):
-    tubes.quitting.set()
-    GLib.idle_add(tubes.quit)
+    # Cleanup temp files:
+    for path in ICON_TEMPFILES.values():
+        path.unlink(missing_ok=True)
+    try:
+        TMPDIR.rmdir()
+    except OSError:
+        pass
 
-for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
-    signal.signal(sig, signal_handler)
 
-Gtk.main()
-
-# Cleanup temp files:
-for path in ICON_TEMPFILES.values():
-    path.unlink(missing_ok=True)
+if __name__ == '__main__':
+    main()
